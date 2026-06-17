@@ -1,0 +1,84 @@
+# -*- coding: utf-8 -*-
+
+"""
+4-1-3離散程度—資料穩不穩定？
+"""
+
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+
+# 設定繁體中文與負號支援
+plt.rcParams['font.sans-serif'] = ['Microsoft JhengHei', 'Arial']
+plt.rcParams['axes.unicode_minus'] = False
+
+# 1. 讀取電商用戶行為資料集
+df = pd.read_csv('eCommerceUser.csv')
+
+
+# 2. 初始化 1 列 2 行的並排畫布 
+fig, axes = plt.subplots(1, 2, figsize=(16, 7.5), facecolor='white')
+
+
+# ==========================================
+# 左圖 (A): 分組密度曲線 (KDE Spread) ➔ 觀察「離散與穩定度」
+# ==========================================
+# 透過曲線的「寬窄平陡」，視覺化標準差與變異數的商務意義
+colors = {'VIP': '#e74c3c', 'Regular': '#005088', 'Low': '#27ae60'}
+
+for u_type, color in colors.items():
+    subset = df[df['user_type'] == u_type]
+    # 計算各組的標準差 (Standard Deviation)
+    std_val = subset['spending'].std()
+    # 計算各組的變異數 (Variance)
+    var_val = subset['spending'].var()
+    # 印出詳細數值（方便資料治理稽核，使用千分位與小數點兩位）
+    print(f"[{u_type}] 標準差 (Std): {std_val:,.2f} 元 | 變異數 (Var): {var_val:,.2f}")
+    
+    sns.kdeplot(data=subset, x='spending', ax=axes[0], fill=True, 
+                color=color, alpha=0.2, linewidth=2.5,
+                label=f'{u_type} (標準差 $\sigma$: ${std_val:,.0f}$)')
+
+axes[0].set_title("圖 A：分組消費密度曲線 (波動度對照)\n核心任務：觀察曲線寬度 ── 越寬代表離散度越高、越不穩定", 
+                 fontsize=12, weight='bold', color='#005088', pad=15)
+axes[0].set_xlabel("年度累積消費金額 (Spending)", fontsize=11)
+axes[0].set_ylabel("密度 (Density)", fontsize=11)
+axes[0].set_xlim(-5000, 100000) # 限制 X 軸範圍以便清晰觀察三大客群主體
+axes[0].grid(True, linestyle=':', alpha=0.4)
+axes[0].xaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: "{:,}".format(int(x))))
+axes[0].legend(fontsize=10, loc='upper right')
+
+# ==========================================
+# 右圖 (B): 標準箱型圖 (Boxplot) ➔ 觀察「離群值雷達」
+# ==========================================
+# 嚴格實踐 IQR 法則，將超過邊界的 20 筆埋伏異常值以紅色菱形強制彈出
+sns.boxplot(
+    data=df, x='user_type', y='spending', ax=axes[1],
+    order=['VIP', 'Regular', 'Low'],   # user_type內的客戶分組
+    palette=['#e74c3c', '#005088', '#27ae60'], width=0.4,
+    flierprops={
+        "marker": "D", 
+        "markerfacecolor": "#e74c3c", 
+        "markeredgecolor": "none", 
+        "markersize": 7,
+        "alpha": 0.8
+    }
+)
+
+axes[1].set_title("圖 B：用戶消費箱型圖 (離群值偵測雷達)\n核心任務：利用 IQR 法則與視覺強度，揪出異常高消費大戶", 
+                 fontsize=12, weight='bold', color='#11caa0', pad=15)
+axes[1].set_xlabel("用戶類型 (User Type)", fontsize=11)
+axes[1].set_ylabel("消費金額 (Spending)", fontsize=11)
+axes[1].grid(True, linestyle=':', alpha=0.4)
+axes[1].yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: "{:,}".format(int(x))))
+
+# 3. 頂部大標題絕對定位
+fig.text(0.5, 0.95, "離散程度與異常診斷：資料波動性 (變異度) vs 離群值偵測 (箱型圖)", 
+         ha='center', fontsize=16, fontweight='bold', color='#2c3e50')
+
+
+plt.tight_layout()
+plt.subplots_adjust(top=0.86)
+
+plt.show()

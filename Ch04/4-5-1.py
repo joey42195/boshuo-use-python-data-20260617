@@ -1,0 +1,121 @@
+
+# -*- coding: utf-8 -*-
+
+"""
+4-5-1電商EDA案例
+"""
+
+import numpy as np
+import pandas as pd
+
+# ---------------------------------------------------------------------
+# 0. 讀取資料集 (n=5128)
+# ---------------------------------------------------------------------
+df = pd.read_csv('eCommerceUser.csv')
+print("探索性資料分析 (EDA) 的真實路徑：從數據觀察到商業假設形成")
+
+# =====================================================================
+# 4-1：我們先問「資料長什麼樣？」── 單一變數的長尾與偏態
+# =====================================================================
+print("\n[STAGE 4-1] 單一變數特徵探索：世界不是均勻分布的")
+print("-" * 60)
+
+# 第一步：看 spending (消費金額) ➔ 平均數 vs 中位數（長尾指標）
+spend_mean = df['spending'].mean()
+spend_median = df['spending'].median()
+print(f"1. 消費金額 (spending) 分布診斷：")
+print(f"   - 整體平均消費：{spend_mean:.2f} 元 | 整體中位數消費：{spend_median:.2f} 元")
+print(f"   - 偏態訊號：平均數顯著高於中位數（拉高了 {spend_mean - spend_median:.2f} 元）")
+print(f"    [商業訊號] 典型右偏長尾結構！整體由極少數「高價值用戶」主導。")
+
+# 第二步：看 income (收入) ➔ 觀察 VIP 的高收入集中度
+vip_income_min = df[df['user_type'] == 'VIP']['income'].min()
+regular_income_mean = df[df['user_type'] == 'Regular']['income'].mean()
+print(f"\n2. 收入金額 (income) 分布診斷：")
+print(f"   - 全站平均收入：{df['income'].mean():.2f} 元")
+print(f"   - 一般用戶 (Regular) 平均收入：{regular_income_mean:.2f} 元")
+print(f"   - 頂級客群 (VIP) 最低收入門檻：{vip_income_min:.2f} 元")
+print(f"    [初步懷疑] VIP 集中在高收入區間，消費與收入高度連動。")
+
+#  第三步：看 visits (訪問次數) ➔ 卜瓦松長尾結構
+print(f"\n3. 訪問次數 (visits) 比例分布：")
+print(df['visits'].value_counts(normalize=True).head(5).round(4) * 100)
+print(f"    [第二訊號] 絕大多數人訪問極少，少數人頻繁使用，使用行為亦呈長尾分布。")
+
+
+# =====================================================================
+# 4-2：開始問「變數之間有關係嗎？」── 複雜的交互關係
+# =====================================================================
+print(" [STAGE 4-2] 雙變數關係分析：表面上的相關性，未必是唯一原因")
+print("-" * 60)
+
+# 第一組關係：income vs spending ➔ 線性相關係數診斷
+correlation_matrix = df[['income', 'spending']].corr().iloc[0, 1]
+print(f"1. 收入與消費 (income vs spending) 相關係數：{correlation_matrix:.4f}")
+print(f"   [結論] 兩者呈現顯著正相關，但並非完美線性，資料中存在巨大散布雜訊。")
+
+#  第二組關係：visits vs spending ➔ 揭示「同行為不同群」的矛盾現象
+# 我們將訪問次數切分為 低頻訪問(<=5) 與 高頻訪問(>5)，看兩者的消費落差
+df['visit_bucket'] = np.where(df['visits'] <= 5, '低頻訪問 (<=5次)', '高頻訪問 (>5次)')
+print(f"\n2. 訪問次數 vs 消費金額 (visits vs spending) 交叉解碼：")
+print(df.groupby(['visit_bucket', 'user_type'])['spending'].mean().round(2).unstack())
+print(f"    [重要發現] 存在兩種高訪問群：高訪問+高消費 (VIP)，以及高訪問+低消費 (Low)！")
+print(f"                   同樣的訪問行為，背後對應完全不同的用戶體系！")
+
+
+# =====================================================================
+# 4-3：開始懷疑「尺度會不會誤導我們？」── 標準化與相對位置
+# =====================================================================
+print(" [STAGE 4-3] 尺度工程校正：擺脫原始數字，看清相對位置")
+print("-" * 60)
+print(f"原始尺度衝突：income 最大達 {df['income'].max():.0f} | visits 最大僅 {df['visits'].max():.0f}")
+print(f"   若直接放進統計模型，高達六位數的 income 將會「主導一切」，visits 的影響力會被徹底低估。")
+
+# 發動 Z-score 尺度公制化轉換 (Z = (X - mu) / sigma)
+for col in ['income', 'visits', 'spending']:
+    df[f'{col}_z'] = (df[col] - df[col].mean()) / df[col].std()
+
+print(f"\n Z-score 標準化後的群體中心點對照矩陣：")
+z_matrix = df.groupby('user_type')[['income_z', 'visits_z', 'spending_z']].mean()
+print(z_matrix.round(4))
+print(f"    [關鍵轉變] 真正的差異不再是金額大小，而是「偏離大盤平均值的標準差單位」！")
+print(f"                   VIP 在三維度上皆大幅凌駕於大盤 (Z > 1)，Low 則全面低於平均 (Z < 0)。")
+
+
+# =====================================================================
+# 4-4：開始問「這些人其實是不是混在一起？」── 結構拆解與長尾觀察
+# =====================================================================
+
+print(" [STAGE 4-4] 結構拆解與黃金長尾觀察：平均值完全掩蓋了真相")
+print("-" * 60)
+
+# 第一、二、四層：跨群體營運戰略貢獻矩陣 (全面覆蓋 4-4-1, 4-4-2, 4-4-4)
+total_revenue = df['spending'].sum()
+df_contribution = df.groupby('user_type').agg(
+    headcount=('user_type', 'count'),
+    revenue_sum=('spending', 'sum'),
+    avg_spending=('spending', 'mean'),
+    avg_conversion=('conversion_rate', 'mean')
+)
+df_contribution['headcount_pct'] = (df_contribution['headcount'] / len(df)) * 100
+df_contribution['revenue_contribution_pct'] = (df_contribution['revenue_sum'] / total_revenue) * 100
+
+# 1. 設定顯示的最大寬度，None 代表不限制，會根據視窗自動延伸
+pd.set_option('display.width', None)
+# 2. 設定欄位不換行（讓所有欄位排在同一列）
+pd.set_option('display.expand_frame_repr', False)
+print("終極營運戰略貢獻矩陣 (對應完整正確數據)：")
+print(df_contribution[['headcount_pct', 'revenue_contribution_pct', 'avg_spending', 'avg_conversion']].round(2))
+print(f"   [ 結構解釋] 平均值死去了！僅佔 10.1% 的 VIP，瘋狂吞噬了 36.72% 的全站營收！")
+print(f"          高達 30% 的 Low 用戶，僅貢獻微不足道的 5.54% 營收。")
+
+#  第三層：4-4-3 利用 Z-score > 3 狙擊埋伏在右側長尾的 20 筆極端高價值大戶
+df_anomalies = df[df['spending_z'] > 3]
+print(f"\n [4-4-3 長尾觀察] 利用 Z-score > 3 篩選出的極端長尾大戶 (共 {len(df_anomalies)} 人)：")
+print(df_anomalies[['user_type', 'income', 'visits', 'spending']].head(5).round(2))
+print(f"    [ 商業訊號] 這 20 筆是黃金資產，必須靠 1 對 1 客服專門服務！")
+
+
+# =====================================================================
+#4-5：最後問「我們能解釋什麼？」── 從觀察走向假設形成
+# =====================================================================
